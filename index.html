@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jogo da Velha Multiplayer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        #game-container {
+            display: none;
+            margin-top: 20px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+        }
+
+        .cell {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #fff;
+            border: 2px solid #ccc;
+            font-size: 2em;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .cell.taken {
+            pointer-events: none;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #status {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: bold;
+        }
+    </style>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+
+<body>
+    <h1>Jogo da Velha Multiplayer</h1>
+    <div id="players">
+        <button id="join-btn">Participar</button>
+        <p id="player-status">Aguardando jogadores...</p>
+    </div>
+
+    <div id="game-container">
+        <div class="board" id="board"></div>
+        <p id="status"></p>
+        <button id="restart-btn" style="display: none;">Novo Jogo</button>
+    </div>
+
+    <script>
+        const socket = io();
+        const joinButton = document.getElementById('join-btn');
+        const playerStatus = document.getElementById('player-status');
+        const gameContainer = document.getElementById('game-container');
+        const board = document.getElementById('board');
+        const statusText = document.getElementById('status');
+        const restartButton = document.getElementById('restart-btn');
+
+        let currentPlayer = 'X';
+        let playerSymbol = null;
+        let boardState = Array(9).fill(null);
+        let gameActive = false;
+
+        joinButton.addEventListener('click', () => {
+            socket.emit('joinGame');
+        });
+
+        socket.on('playerJoined', (playersOnline) => {
+            playerStatus.textContent = `Jogadores conectados: ${playersOnline}/2`;
+            if (playersOnline === 2) {
+                startGame();
+            }
+        });
+
+        socket.on('assignSymbol', (symbol) => {
+            playerSymbol = symbol;
+        });
+
+        socket.on('startGame', () => {
+            gameActive = true;
+            gameContainer.style.display = 'block';
+            joinButton.style.display = 'none';
+            renderBoard();
+            updateStatus();
+        });
+
+        socket.on('updateBoard', (newBoardState, nextPlayer) => {
+            boardState = newBoardState;
+            currentPlayer = nextPlayer;
+            renderBoard();
+            updateStatus();
+        });
+
+        socket.on('gameOver', (message) => {
+            statusText.textContent = message;
+            endGame();
+        });
+
+        function startGame() {
+            playerStatus.textContent = 'Partida iniciada!';
+        }
+
+        function renderBoard() {
+            board.innerHTML = '';
+            boardState.forEach((value, index) => {
+                const cell = document.createElement('div');
+                cell.classList.add('cell');
+                if (value) cell.classList.add('taken');
+                cell.textContent = value || '';
+                if (!value && playerSymbol === currentPlayer && gameActive) {
+                    cell.addEventListener('click', () => handleCellClick(index));
+                }
+                board.appendChild(cell);
+            });
+        }
+
+        function handleCellClick(index) {
+            if (!gameActive || boardState[index]) return;
+            socket.emit('makeMove', index);
+        }
+
+        function updateStatus() {
+            statusText.textContent = `Vez do jogador: ${currentPlayer}`;
+        }
+
+        function endGame() {
+            gameActive = false;
+            restartButton.style.display = 'block';
+        }
+
+        restartButton.addEventListener('click', () => {
+            socket.emit('restartGame');
+        });
+
+        socket.on('restartGame', () => {
+            boardState = Array(9).fill(null);
+            gameActive = true;
+            restartButton.style.display = 'none';
+            renderBoard();
+            updateStatus();
+        });
+    </script>
+</body>
+
+</html>
